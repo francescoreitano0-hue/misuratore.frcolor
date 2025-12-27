@@ -1,44 +1,33 @@
+
 <!DOCTYPE html>
 <html lang="it">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Irina AR - Misuratore Cantiere</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Irina - Misuratore Trigonometrico</title>
+    <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
     <div id="ui-container">
+        <div id="status-bar">Inizializzazione Sensori...</div>
         
-        <div id="header-info">
-            <div id="measure-output">
-                <span id="current-value">0.00</span><small>m</small>
-            </div>
-            <div id="status-bar">
-                <span id="accuracy-indicator">Inizializzazione...</span>
-            </div>
-        </div>
+        <div id="measurement-display">0.00 m</div>
 
-        <div id="interaction-area">
-            <button id="main-action-btn">CARICAMENTO AR...</button>
-        </div>
-
-        <div id="history-log">
-            <div class="log-header">MISURE SALVATE</div>
-            <ul id="measure-list">
-                </ul>
+        <div id="calibration">
+            <label>Tua altezza (m): </label>
+            <input type="number" id="user-height" value="1.60" step="0.01">
         </div>
         
+        <div id="controls">
+            <button id="btn-action" class="btn-main">PUNTA BASE</button>
+            <button id="btn-reset" class="btn-sub">RESET</button>
+        </div>
+
+        <div id="log-panel">
+            <strong>Misure salvate:</strong>
+            <ul id="measurements-list"></ul>
+        </div>
     </div>
-
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-            }
-        }
-    </script>
-
-    <script type="module" src="app.js"></script>
+    <script src="js/ar-engine.js"></script>
 </body>
 </html>
