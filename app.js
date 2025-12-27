@@ -3,9 +3,7 @@ import { ARButton } from 'three/addons/webxr/ARButton.js';
 
 let container, renderer, scene, camera, controller;
 let reticle, hitTestSource = null, hitTestSourceRequested = false;
-let measurements = [];
-let startPoint = null;
-let currentLine = null;
+let startPoint = null, lineMesh = null;
 let isMeasuring = false;
 
 init();
@@ -16,10 +14,7 @@ function init() {
     document.body.appendChild(container);
 
     scene = new THREE.Scene();
-    camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
-
-    const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
-    scene.add(light);
+    camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 30);
 
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(window.devicePixelRatio);
@@ -27,61 +22,69 @@ function init() {
     renderer.xr.enabled = true;
     container.appendChild(renderer.domElement);
 
-    // Integrazione ARButton
-    document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] }));
+    // Bottone AR con overlay per i comandi
+    const btn = ARButton.createButton(renderer, { 
+        requiredFeatures: ['hit-test'],
+        optionalFeatures: ['dom-overlay'],
+        domOverlay: { root: document.getElementById('ui-container') }
+    });
+    document.body.appendChild(btn);
 
-    // Mirino (Reticle)
-    reticle = new THREE.Mesh(
-        new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2),
-        new THREE.MeshBasicMaterial({ color: 0x00ff00 })
-    );
+    // Reticolo ad alta visibilità
+    const ringGeom = new THREE.RingGeometry(0.04, 0.05, 32).rotateX(-Math.PI / 2);
+    const dotGeom = new THREE.CircleGeometry(0.01, 12).rotateX(-Math.PI / 2);
+    reticle = new THREE.Group();
+    reticle.add(new THREE.Mesh(ringGeom, new THREE.MeshBasicMaterial({ color: 0x00ff00 })));
+    reticle.add(new THREE.Mesh(dotGeom, new THREE.MeshBasicMaterial({ color: 0xffffff })));
     reticle.matrixAutoUpdate = false;
     reticle.visible = false;
     scene.add(reticle);
 
-    // Controller (Input tap sullo schermo)
     controller = renderer.xr.getController(0);
     controller.addEventListener('select', onSelect);
     scene.add(controller);
 
     window.addEventListener('resize', onWindowResize);
-    document.getElementById('reset-btn').addEventListener('click', resetSession);
 }
 
 function onSelect() {
     if (!reticle.visible) return;
 
     if (!isMeasuring) {
-        // Inizio misura
+        // PUNTO A
         startPoint = new THREE.Vector3().setFromMatrixPosition(reticle.matrix);
         isMeasuring = true;
-        document.getElementById('main-action-btn').textContent = "FISSA FINE";
+        updateUI("Punto A fissato. Muoviti verso il punto B", "#ffcc00");
     } else {
-        // Fine misura
+        // PUNTO B
         const endPoint = new THREE.Vector3().setFromMatrixPosition(reticle.matrix);
-        const dist = startPoint.distanceTo(endPoint);
-        saveMeasure(dist);
-        isMeasuring = false;
-        startPoint = null;
-        document.getElementById('main-action-btn').textContent = "MISURA NUOVA";
+        const distance = startPoint.distanceTo(endPoint);
+        logMeasure(distance);
+        resetMeasure();
     }
 }
 
-function saveMeasure(val) {
+function updateUI(msg, color) {
+    const btn = document.getElementById('main-action-btn');
+    btn.textContent = msg;
+    btn.style.borderColor = color;
+}
+
+function logMeasure(d) {
     const list = document.getElementById('measure-list');
-    const li = document.createElement('li');
-    li.innerText = `Misura: ${val.toFixed(2)}m - ${new Date().toLocaleTimeString()}`;
-    list.prepend(li);
+    const entry = document.createElement('li');
+    entry.innerHTML = `<b>${d.toFixed(2)} m</b> <small>${new Date().toLocaleTimeString()}</small>`;
+    list.prepend(entry);
 }
 
-function onWindowResize() {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-}
-
-function animate() {
-    renderer.setAnimationLoop(render);
+function resetMeasure() {
+    isMeasuring = false;
+    startPoint = null;
+    if (lineMesh) {
+        scene.remove(lineMesh);
+        lineMesh = null;
+    }
+    updateUI("PUNTA E MISURA", "#00ff00");
 }
 
 function render(timestamp, frame) {
@@ -89,9 +92,9 @@ function render(timestamp, frame) {
         const referenceSpace = renderer.xr.getReferenceSpace();
         const session = renderer.xr.getSession();
 
-        if (hitTestSourceRequested === false) {
-            session.requestReferenceSpace('viewer').then((referenceSpace) => {
-                session.requestHitTestSource({ space: referenceSpace }).then((source) => {
+        if (!hitTestSourceRequested) {
+            session.requestReferenceSpace('viewer').then((ref) => {
+                session.requestHitTestSource({ space: ref }).then((source) => {
                     hitTestSource = source;
                 });
             });
@@ -99,34 +102,44 @@ function render(timestamp, frame) {
         }
 
         if (hitTestSource) {
-            const hitTestResults = frame.getHitTestResults(hitTestSource);
-            if (hitTestResults.length) {
-                const hit = hitTestResults[0];
+            const hitResults = frame.getHitTestResults(hitTestSource);
+            if (hitResults.length > 0) {
+                const hit = hitResults[0];
+                const pose = hit.getPose(referenceSpace);
                 reticle.visible = true;
-                reticle.matrix.fromArray(hit.getPose(referenceSpace).transform.matrix);
-                
-                document.getElementById('main-action-btn').disabled = false;
-                document.getElementById('accuracy-indicator').textContent = "Punto Agganciato";
-                document.getElementById('accuracy-indicator').style.color = "#00ff00";
+                reticle.matrix.fromArray(pose.transform.matrix);
 
+                // LOGICA MISURA DINAMICA
                 if (isMeasuring && startPoint) {
                     const currentPos = new THREE.Vector3().setFromMatrixPosition(reticle.matrix);
                     const d = startPoint.distanceTo(currentPos);
                     document.getElementById('current-value').textContent = d.toFixed(2);
+                    drawLaser(startPoint, currentPos);
                 }
+                if(!isMeasuring) updateUI("AGANCIA PUNTO A", "#00ff00");
             } else {
                 reticle.visible = false;
-                document.getElementById('accuracy-indicator').textContent = "Scansiona la superficie...";
-                document.getElementById('accuracy-indicator').style.color = "#ff0000";
+                updateUI("MUOVI TELEFONO: CERCO PIANO...", "#ff0000");
             }
         }
     }
     renderer.render(scene, camera);
 }
 
-function resetSession() {
-    isMeasuring = false;
-    startPoint = null;
-    document.getElementById('current-value').textContent = "0.00";
-    document.getElementById('measure-list').innerHTML = "";
+function drawLaser(start, end) {
+    if (lineMesh) scene.remove(lineMesh);
+    const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
+    const material = new THREE.LineBasicMaterial({ color: 0x00ff00, linewidth: 5 });
+    lineMesh = new THREE.Line(geometry, material);
+    scene.add(lineMesh);
+}
+
+function animate() {
+    renderer.setAnimationLoop(render);
+}
+
+function onWindowResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
 }
