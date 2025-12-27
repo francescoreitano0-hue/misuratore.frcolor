@@ -3,109 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Irina Laser Measure</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <style>
-        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; background: #000; }
-        #ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: space-between; pointer-events: none; z-index: 10; }
-        #header { background: rgba(0,0,0,0.8); color: #0f0; padding: 15px; text-align: center; pointer-events: auto; border-bottom: 2px solid #0f0; }
-        #display { font-size: 50px; font-weight: bold; color: #0f0; text-align: center; text-shadow: 0 0 10px #0f0; margin-top: 20px; }
-        #controls { padding: 40px; display: flex; justify-content: center; gap: 20px; pointer-events: auto; }
-        .btn { padding: 25px 40px; font-size: 20px; font-weight: bold; border-radius: 15px; border: 3px solid #fff; cursor: pointer; text-transform: uppercase; transition: 0.3s; }
-        #btn-main { background: #ff0000; color: white; box-shadow: 0 0 20px rgba(255,0,0,0.5); }
-        #btn-reset { background: #444; color: white; border: none; }
-        #crosshair { position: absolute; top: 50%; left: 50%; width: 40px; height: 40px; transform: translate(-50%, -50%); pointer-events: none; border: 2px solid #ff0000; border-radius: 50%; }
-        #crosshair::after { content: ''; position: absolute; top: 50%; left: 50%; width: 4px; height: 4px; background: #ff0000; transform: translate(-50%, -50%); border-radius: 50%; }
-    </style>
+    <title>AR Measure Pro - Edilizia</title>
+    <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-
-    <div id="crosshair"></div>
-    
-    <div id="ui">
-        <div id="header">
-            <div id="status">PUNTA IL PUNTO A E PREMI IL TASTO ROSSO</div>
-            <div id="display">0.00 m</div>
+    <div id="ui-container">
+        <div id="status-bar">Inizializzazione AR...</div>
+        <div id="measurement-display">0.00 m</div>
+        
+        <div id="controls">
+            <button id="btn-place" class="btn-main">Fissa Punto A</button>
+            <button id="btn-reset" class="btn-sub">Reset</button>
         </div>
 
-        <div id="controls">
-            <button id="btn-main" class="btn">FISSA PUNTO A</button>
-            <button id="btn-reset" class="btn">RESET</button>
+        <div id="log-panel">
+            <strong>Misure salvate:</strong>
+            <ul id="measurements-list"></ul>
         </div>
     </div>
 
-    <script>
-        let scene, camera, renderer, video, texture;
-        let startPoint = null;
-        let laserLine = null;
-        let currentTilt = 0;
-        let userHeight = 1.60; // Altezza standard da terra
-
-        async function init() {
-            scene = new THREE.Scene();
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            document.body.appendChild(renderer.domElement);
-
-            // Background Video
-            video = document.createElement('video');
-            video.setAttribute('playsinline', '');
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-            video.srcObject = stream;
-            video.play();
-
-            texture = new THREE.VideoTexture(video);
-            scene.background = texture;
-
-            window.addEventListener('deviceorientation', (e) => { currentTilt = e.beta; });
-            animate();
-        }
-
-        function calculateVector() {
-            // Trasforma inclinazione in coordinate 3D approssimative
-            const rad = (90 - currentTilt) * Math.PI / 180;
-            const z = -Math.cos(rad) * 5;
-            const y = -Math.sin(rad) * 5;
-            return new THREE.Vector3(0, y, z);
-        }
-
-        document.getElementById('btn-main').onclick = () => {
-            const pos = calculateVector();
-
-            if (!startPoint) {
-                startPoint = pos;
-                document.getElementById('btn-main').textContent = "FISSA PUNTO B";
-                document.getElementById('status').textContent = "PUNTO A FISSATO. ORA PUNTA IL PUNTO B";
-            } else {
-                const dist = startPoint.distanceTo(pos);
-                document.getElementById('display').textContent = dist.toFixed(2) + " m";
-                
-                // Crea Linea Laser tra A e B
-                if (laserLine) scene.remove(laserLine);
-                const geometry = new THREE.BufferGeometry().setFromPoints([startPoint, pos]);
-                const material = new THREE.LineBasicMaterial({ color: 0xff0000, linewidth: 5 });
-                laserLine = new THREE.Line(geometry, material);
-                scene.add(laserLine);
-
-                startPoint = null;
-                document.getElementById('btn-main').textContent = "FISSA PUNTO A";
+    <script async src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
             }
-        };
-
-        document.getElementById('btn-reset').onclick = () => {
-            if (laserLine) scene.remove(laserLine);
-            startPoint = null;
-            document.getElementById('display').textContent = "0.00 m";
-            document.getElementById('btn-main').textContent = "FISSA PUNTO A";
-        };
-
-        function animate() {
-            requestAnimationFrame(animate);
-            renderer.render(scene, camera);
         }
-
-        init();
     </script>
+    <script type="module" src="js/ar-engine.js"></script>
 </body>
 </html>
