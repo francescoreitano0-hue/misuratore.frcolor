@@ -3,34 +3,148 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>AR Measure Pro - Edilizia</title>
-    <link rel="stylesheet" href="css/style.css">
+    <title>Irina - Sistema AR Professionale</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; background: #000; }
+        #ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: space-between; pointer-events: none; z-index: 10; }
+        #header { background: rgba(0,0,0,0.85); color: #00ff00; padding: 20px; text-align: center; border-bottom: 2px solid #00ff00; pointer-events: auto; }
+        #display { font-size: 55px; font-weight: bold; text-shadow: 0 0 15px #00ff00; margin: 10px 0; }
+        #controls { padding: 40px; display: flex; justify-content: center; gap: 20px; pointer-events: auto; }
+        .btn { padding: 25px 40px; font-size: 22px; font-weight: bold; border-radius: 20px; border: 3px solid #fff; cursor: pointer; text-transform: uppercase; transition: 0.3s; }
+        #btn-place { background: #ff0000; color: white; box-shadow: 0 0 25px rgba(255,0,0,0.6); }
+        #btn-reset { background: #333; color: white; border: none; }
+        #status { font-size: 16px; font-weight: bold; letter-spacing: 1px; }
+    </style>
 </head>
 <body>
-    <div id="ui-container">
-        <div id="status-bar">Inizializzazione AR...</div>
-        <div id="measurement-display">0.00 m</div>
-        
-        <div id="controls">
-            <button id="btn-place" class="btn-main">Fissa Punto A</button>
-            <button id="btn-reset" class="btn-sub">Reset</button>
+    <div id="ui">
+        <div id="header">
+            <div id="status">INIZIALIZZAZIONE AR...</div>
+            <div id="display">0.00 m</div>
         </div>
-
-        <div id="log-panel">
-            <strong>Misure salvate:</strong>
-            <ul id="measurements-list"></ul>
+        <div id="controls">
+            <button id="btn-place" class="btn">FISSA PUNTO</button>
+            <button id="btn-reset" class="btn">RESET</button>
         </div>
     </div>
 
-    <script async src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    <script type="module">
+        import * as THREE from 'https://unpkg.com/three@0.157.0/build/three.module.js';
+        import { ARButton } from 'https://unpkg.com/three@0.157.0/examples/jsm/webxr/ARButton.js';
+
+        let scene, camera, renderer, controller, reticle;
+        let hitTestSource = null;
+        let hitTestSourceRequested = false;
+        let points = [];
+        let line = null;
+
+        init();
+        animate();
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.xr.enabled = true;
+            document.body.appendChild(renderer.domElement);
+
+            const arButton = ARButton.createButton(renderer, { 
+                requiredFeatures: ['hit-test'],
+                optionalFeatures: ['dom-overlay'],
+                domOverlay: { root: document.getElementById('ui') }
+            });
+            document.body.appendChild(arButton);
+
+            // Mirino (Reticolo) che segue le superfici
+            const geometry = new THREE.RingGeometry(0.04, 0.05, 32).rotateX(-Math.PI / 2);
+            const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+            reticle = new THREE.Mesh(geometry, material);
+            reticle.matrixAutoUpdate = false;
+            reticle.visible = false;
+            scene.add(reticle);
+
+            controller = renderer.xr.getController(0);
+            scene.add(controller);
+
+            document.getElementById('btn-place').addEventListener('click', onPlace);
+            document.getElementById('btn-reset').addEventListener('click', onReset);
+        }
+
+        function onPlace() {
+            if (reticle.visible) {
+                const pos = new THREE.Vector3().setFromMatrixPosition(reticle.matrix);
+                points.push(pos);
+
+                const dotGeo = new THREE.SphereGeometry(0.015);
+                const dotMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+                const dot = new THREE.Mesh(dotGeo, dotMat);
+                dot.position.copy(pos);
+                scene.add(dot);
+
+                if (points.length === 2) {
+                    const distance = points[0].distanceTo(points[1]);
+                    document.getElementById('display').textContent = distance.toFixed(2) + " m";
+                    
+                    const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
+                    const lineMat = new THREE.LineBasicMaterial({ color: 0xff0000, linewidth: 5 });
+                    line = new THREE.Line(lineGeo, lineMat);
+                    scene.add(line);
+                    
+                    document.getElementById('status').textContent = "MISURA COMPLETATA";
+                } else if (points.length > 2) {
+                    onReset();
+                    onPlace();
+                } else {
+                    document.getElementById('status').textContent = "PUNTO A FISSATO. PUNTA B";
+                }
             }
         }
+
+        function onReset() {
+            points = [];
+            scene.children.filter(c => c.type === "Line" || c.type === "Mesh" && c !== reticle)
+                  .forEach(c => scene.remove(c));
+            document.getElementById('display').textContent = "0.00 m";
+            document.getElementById('status').textContent = "PUNTA E FISSA PUNTO A";
+        }
+
+        function animate() {
+            renderer.setAnimationLoop(render);
+        }
+
+        function render(timestamp, frame) {
+            if (frame) {
+                const referenceSpace = renderer.xr.getReferenceSpace();
+                const session = renderer.xr.getSession();
+
+                if (hitTestSourceRequested === false) {
+                    session.requestReferenceSpace('viewer').then((refSpace) => {
+                        session.requestHitTestSource({ space: refSpace }).then((source) => {
+                            hitTestSource = source;
+                        });
+                    });
+                    hitTestSourceRequested = true;
+                }
+
+                if (hitTestSource) {
+                    const hitTestResults = frame.getHitTestResults(hitTestSource);
+                    if (hitTestResults.length > 0) {
+                        const hit = hitTestResults[0];
+                        const pose = hit.getPose(referenceSpace);
+                        reticle.visible = true;
+                        reticle.matrix.fromArray(pose.transform.matrix);
+                        if(points.length === 0) document.getElementById('status').textContent = "SISTEMA PRONTO";
+                    } else {
+                        reticle.visible = false;
+                        if(points.length === 0) document.getElementById('status').textContent = "MUOVI IL TELEFONO PER TROVARE SUPERFICI";
+                    }
+                }
+            }
+            renderer.render(scene, camera);
+        }
     </script>
-    <script type="module" src="js/ar-engine.js"></script>
 </body>
 </html>
