@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Irina AR Measure</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="ui-container">
+        <div id="status-bar">
+            <span id="accuracy-indicator">Inizializzazione...</span>
+        </div>
+        
+        <div id="measure-output">
+            <span id="current-value">0.00</span><small>m</small>
+        </div>
+
+        <div id="controls">
+            <button id="main-action-btn" disabled>PUNTA PARETE</button>
+            <button id="reset-btn">RESET</button>
+        </div>
+
+        <div id="history-log">
+            <ul id="measure-list"></ul>
+        </div>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+    <script type="module" src="app.js"></script>
+</body>
+</html>
